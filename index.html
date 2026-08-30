@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="Farkle"/>
+<meta name="theme-color" content="#5c1a1a"/>
+<link rel="apple-touch-icon" href="farkle-icon.png"/>
+<title>Farkle Scorekeeper</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #5c1a1a; color: #f6efe0; font-family: Georgia, 'Times New Roman', serif; }
+  body { min-height: 100vh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); }
+  #app { max-width: 480px; margin: 0 auto; padding: 14px 14px 28px; }
+  h1 { font-size: 26px; letter-spacing: 0.12em; text-align: center; margin: 6px 0 2px; color: #f2d98c; }
+  .sub { text-align: center; font-size: 12px; color: rgba(246,239,224,0.55); margin-bottom: 14px; }
+  .card { background: #6d2424; border: 1px solid rgba(242,217,140,0.25); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+  /* players */
+  .prow { display: flex; align-items: center; justify-content: space-between; padding: 9px 10px; border-radius: 10px; margin-bottom: 6px; background: rgba(0,0,0,0.15); font-size: 17px; }
+  .prow.active { background: #f2d98c; color: #3d1010; font-weight: 700; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+  .prow .score { font-variant-numeric: tabular-nums; font-size: 19px; }
+  .badge { font-size: 10.5px; font-family: sans-serif; letter-spacing: 0.05em; padding: 2px 7px; border-radius: 8px; background: rgba(0,0,0,0.25); margin-left: 8px; vertical-align: 2px; }
+  .prow.active .badge { background: rgba(61,16,16,0.2); }
+  /* tally */
+  .tally { text-align: center; margin: 4px 0 10px; }
+  .tally .num { font-size: 44px; font-weight: 700; color: #f2d98c; font-variant-numeric: tabular-nums; line-height: 1; }
+  .tally .lbl { font-size: 11.5px; letter-spacing: 0.1em; color: rgba(246,239,224,0.6); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; min-height: 30px; margin-bottom: 8px; }
+  .chip { background: rgba(0,0,0,0.25); border-radius: 20px; padding: 5px 11px; font-size: 13.5px; cursor: pointer; user-select: none; }
+  .chip small { opacity: 0.65; }
+  /* combo grid */
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .combo { background: #f6efe0; color: #3d1010; border: none; border-radius: 11px; padding: 11px 4px 9px; font-family: Georgia, serif; font-size: 15px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+  .combo small { display: block; font-weight: 400; font-size: 11.5px; color: #8a4a1f; margin-top: 2px; }
+  .combo:active { transform: translateY(1px); }
+  .wide { grid-column: span 3; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* actions */
+  .actions { display: flex; gap: 10px; margin-top: 12px; }
+  .actions button { flex: 1; border: none; border-radius: 12px; padding: 15px; font-size: 17px; font-weight: 700; font-family: Georgia, serif; cursor: pointer; }
+  .farkle { background: #a32020; color: #fff; }
+  .bank { background: #f2d98c; color: #3d1010; }
+  .bank:disabled { opacity: 0.4; }
+  .hint { text-align: center; font-size: 12px; color: #f2b98c; min-height: 16px; margin-top: 6px; }
+  .menu { display: flex; gap: 8px; justify-content: center; margin-top: 6px; }
+  .menu button { background: none; border: 1px solid rgba(246,239,224,0.3); color: rgba(246,239,224,0.8); border-radius: 10px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; font-family: Georgia, serif; }
+  /* setup + winner */
+  .setup input { width: 100%; padding: 11px; border-radius: 10px; border: none; font-size: 16px; margin-bottom: 8px; font-family: Georgia, serif; background: #f6efe0; color: #3d1010; }
+  .setup .row { display: flex; gap: 8px; }
+  .setup .row input { flex: 1; }
+  .setup .row button { border: none; background: #a32020; color: #fff; border-radius: 10px; width: 44px; font-size: 18px; cursor: pointer; }
+  .big { width: 100%; border: none; border-radius: 12px; padding: 15px; font-size: 17px; font-weight: 700; background: #f2d98c; color: #3d1010; cursor: pointer; font-family: Georgia, serif; margin-top: 4px; }
+  .banner { text-align: center; background: #f2d98c; color: #3d1010; border-radius: 10px; padding: 8px; font-weight: 700; font-size: 14px; margin-bottom: 10px; }
+  .winner { text-align: center; padding: 24px 0; }
+  .winner .trophy { font-size: 56px; }
+  .winner .name { font-size: 30px; color: #f2d98c; font-weight: 700; margin: 8px 0; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const TARGET = 10000, OPEN_MIN = 500;
+const COMBOS = [
+  { l: "1", v: 100 }, { l: "5", v: 50 }, { l: "3×1s", v: 1000 },
+  { l: "3×2s", v: 200 }, { l: "3×3s", v: 300 }, { l: "3×4s", v: 400 },
+  { l: "3×5s", v: 500 }, { l: "3×6s", v: 600 }, { l: "4 of a kind", v: 1000 },
+  { l: "5 of a kind", v: 2000 }, { l: "6 of a kind", v: 3000 }, { l: "Straight 1–6", v: 1500 },
+];
+const WIDE = [{ l: "Three pairs", v: 1500 }];
+
+let S = load() || null; // {players:[{name,score,opened}], turn, tally:[], phase:'setup'|'play'|'over', finalTriggerBy, finalLeft:[], winner}
+let hist = [];
+
+function save() { try { localStorage.setItem("farkle-state", JSON.stringify(S)); } catch (e) {} }
+function load() { try { const r = localStorage.getItem("farkle-state"); return r ? JSON.parse(r) : null; } catch (e) { return null; } }
+function names() { try { return JSON.parse(localStorage.getItem("farkle-names") || "null"); } catch (e) { return null; } }
+
+function el(html) { const d = document.createElement("div"); d.innerHTML = html; return d.firstElementChild; }
+const app = document.getElementById("app");
+
+function tallySum() { return S.tally.reduce((a, c) => a + c.v, 0); }
+
+function render() {
+  app.innerHTML = "";
+  app.appendChild(el('<h1>FARKLE</h1>'));
+  app.appendChild(el('<div class="sub">first to ' + TARGET.toLocaleString() + ' · ' + OPEN_MIN + ' to open · last licks</div>'));
+  if (!S || S.phase === "setup") return renderSetup();
+  if (S.phase === "over") return renderWinner();
+  renderPlay();
+}
+
+function renderSetup() {
+  const prior = (S && S.players && S.players.map((p) => p.name)) || names() || ["", ""];
+  const card = el('<div class="card setup"><div id="nameRows"></div></div>');
+  const rows = card.querySelector("#nameRows");
+  const addRow = (val) => {
+    const r = el('<div class="row"><input placeholder="Player name" maxlength="14"/><button>−</button></div>');
+    r.querySelector("input").value = val || "";
+    r.querySelector("button").onclick = () => { if (rows.children.length > 2) r.remove(); };
+    rows.appendChild(r);
+  };
+  prior.forEach(addRow);
+  const add = el('<button class="big" style="background:#6d2424;color:#f6efe0;border:1px dashed rgba(246,239,224,0.4)">+ Add player</button>');
+  add.onclick = () => { if (rows.children.length < 8) addRow(""); };
+  card.appendChild(add);
+  const start = el('<button class="big">Roll the bones</button>');
+  start.onclick = () => {
+    const ns = [...rows.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean);
+    if (ns.length < 2) return;
+    try { localStorage.setItem("farkle-names", JSON.stringify(ns)); } catch (e) {}
+    S = { players: ns.map((n) => ({ name: n, score: 0, opened: false })), turn: 0, tally: [], phase: "play", finalTriggerBy: null, finalLeft: null, winner: null };
+    hist = [];
+    save(); render();
+  };
+  card.appendChild(start);
+  app.appendChild(card);
+}
+
+function renderPlay() {
+  if (S.finalTriggerBy !== null) app.appendChild(el('<div class="banner">⚠ Final round — last turn for everyone!</div>'));
+  const pc = el('<div class="card"></div>');
+  S.players.forEach((p, i) => {
+    const row = el('<div class="prow' + (i === S.turn ? " active" : "") + '"><span>' + esc(p.name) +
+      (!p.opened ? '<span class="badge">needs ' + OPEN_MIN + '</span>' : "") +
+      (S.finalLeft && !S.finalLeft.includes(i) && i !== S.finalTriggerBy ? '<span class="badge">done</span>' : "") +
+      '</span><span class="score">' + p.score.toLocaleString() + "</span></div>");
+    pc.appendChild(row);
+  });
+  app.appendChild(pc);
+
+  const t = el('<div class="card"><div class="tally"><div class="lbl">' + esc(S.players[S.turn].name).toUpperCase() + '\u2019S TURN</div><div class="num">' + tallySum().toLocaleString() + '</div></div><div class="chips" id="chips"></div><div class="grid" id="grid"></div><div class="actions"><button class="farkle" id="fk">FARKLE</button><button class="bank" id="bk">BANK</button></div><div class="hint" id="hint"></div><div class="menu"><button id="undoB">Undo</button><button id="playersB">Players</button><button id="newB">New game</button></div></div>');
+  const chips = t.querySelector("#chips");
+  S.tally.forEach((c, ci) => {
+    const ch = el('<span class="chip">' + esc(c.l) + ' <small>+' + c.v + ' ×</small></span>');
+    ch.onclick = () => { S.tally.splice(ci, 1); save(); render(); };
+    chips.appendChild(ch);
+  });
+  if (!S.tally.length) chips.appendChild(el('<span style="font-size:12px;color:rgba(246,239,224,0.4);align-self:center">tap what you rolled…</span>'));
+  const grid = t.querySelector("#grid");
+  COMBOS.forEach((c) => {
+    const b = el('<button class="combo">' + esc(c.l) + "<small>" + c.v + "</small></button>");
+    b.onclick = () => { S.tally.push({ l: c.l, v: c.v }); save(); render(); };
+    grid.appendChild(b);
+  });
+  const wideWrap = el('<div class="wide"></div>');
+  WIDE.forEach((c) => {
+    const b = el('<button class="combo">' + esc(c.l) + "<small>" + c.v + "</small></button>");
+    b.onclick = () => { S.tally.push({ l: c.l, v: c.v }); save(); render(); };
+    wideWrap.appendChild(b);
+  });
+  grid.appendChild(wideWrap);
+
+  const cur = S.players[S.turn], sum = tallySum();
+  const bank = t.querySelector("#bk");
+  const hint = t.querySelector("#hint");
+  const canBank = sum > 0 && (cur.opened || sum >= OPEN_MIN);
+  bank.disabled = !canBank;
+  if (sum > 0 && !cur.opened && sum < OPEN_MIN) hint.textContent = "Needs " + OPEN_MIN + " in one turn to get on the board (" + (OPEN_MIN - sum) + " to go)";
+  bank.onclick = () => { if (!canBank) return; snapshot(); cur.score += sum; cur.opened = true; endTurn(true); };
+  t.querySelector("#fk").onclick = () => { snapshot(); endTurn(false); };
+  t.querySelector("#undoB").onclick = () => { if (hist.length) { S = hist.pop(); save(); render(); } };
+  t.querySelector("#playersB").onclick = () => { snapshot(); S.phase = "setup"; save(); render(); };
+  t.querySelector("#newB").onclick = () => { if (confirm("Start a new game?")) { S = { ...S, players: S.players.map((p) => ({ ...p, score: 0, opened: false })), turn: 0, tally: [], phase: "play", finalTriggerBy: null, finalLeft: null, winner: null }; hist = []; save(); render(); } };
+  app.appendChild(t);
+}
+
+function snapshot() { hist.push(JSON.parse(JSON.stringify(S))); if (hist.length > 40) hist.shift(); }
+
+function endTurn(banked) {
+  S.tally = [];
+  const i = S.turn;
+  // final-round bookkeeping
+  if (S.finalTriggerBy === null && banked && S.players[i].score >= TARGET) {
+    S.finalTriggerBy = i;
+    S.finalLeft = S.players.map((_, k) => k).filter((k) => k !== i);
+  } else if (S.finalLeft) {
+    S.finalLeft = S.finalLeft.filter((k) => k !== i);
+  }
+  if (S.finalTriggerBy !== null && S.finalLeft && S.finalLeft.length === 0) {
+    let best = 0;
+    S.players.forEach((p, k) => { if (p.score > S.players[best].score) best = k; });
+    S.winner = best; S.phase = "over"; save(); render(); return;
+  }
+  // next player (skip those already done in final round)
+  let n = (i + 1) % S.players.length;
+  if (S.finalLeft) { while (!S.finalLeft.includes(n)) n = (n + 1) % S.players.length; }
+  S.turn = n;
+  save(); render();
+}
+
+function renderWinner() {
+  const w = S.players[S.winner];
+  const c = el('<div class="card winner"><div class="trophy">🏆</div><div class="name">' + esc(w.name) + ' wins!</div><div id="fin"></div></div>');
+  const fin = c.querySelector("#fin");
+  [...S.players].sort((a, b) => b.score - a.score).forEach((p) => {
+    fin.appendChild(el('<div class="prow"><span>' + esc(p.name) + '</span><span class="score">' + p.score.toLocaleString() + "</span></div>"));
+  });
+  const again = el('<button class="big">Rematch</button>');
+  again.onclick = () => { S = { ...S, players: S.players.map((p) => ({ ...p, score: 0, opened: false })), turn: S.winner, tally: [], phase: "play", finalTriggerBy: null, finalLeft: null, winner: null }; hist = []; save(); render(); };
+  c.appendChild(again);
+  const setup = el('<button class="big" style="background:#6d2424;color:#f6efe0;border:1px solid rgba(246,239,224,0.4);margin-top:8px">Change players</button>');
+  setup.onclick = () => { S.phase = "setup"; save(); render(); };
+  c.appendChild(setup);
+  app.appendChild(c);
+}
+
+function esc(x) { return String(x).replace(/&/g, "&amp;").replace(/</g, "&lt;"); }
+if (!S) S = { phase: "setup" };
+render();
+</script>
+</body>
+</html>

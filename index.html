@@ -21,10 +21,10 @@
     --green: #5c9330; --green-deep: #467424;
     --shadow-soft: 0 1px 2px rgba(60,50,30,0.06), 0 4px 14px rgba(60,50,30,0.07);
   }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: -apple-system, "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif; }
-  body { min-height: 100vh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); display: flex; flex-direction: column;
-    background: linear-gradient(180deg, #faf8f4 0%, #f2efe8 100%); background-attachment: fixed; }
-  #app { max-width: 480px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; flex: 1; }
+  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--ink); font-family: -apple-system, "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif; }
+  body { height: 100vh; height: 100dvh; padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom); display: flex; flex-direction: column;
+    background: linear-gradient(180deg, #faf8f4 0%, #f2efe8 100%); }
+  #app { max-width: 480px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; flex: 1; min-height: 0; }
   /* header */
   .hdr { display: flex; align-items: center; justify-content: space-between; padding: 12px 12px 8px; }
   .hdr .msg { font-weight: 800; font-size: 18px; flex: 1; text-align: center; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -40,7 +40,10 @@
   .turnrow:active { transform: scale(0.97); background: #fdf6ec; }
   .turnrow.alt { background: #fbfaf7; }
   .coltotal { text-align: center; font-size: 13px; color: var(--sub); padding: 5px 0 2px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; }
-  .ledgerscroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 0 10px; }
+  .ledgerscroll { flex: 1; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 2px 0 10px; }
+  .standing { display: flex; justify-content: space-between; align-items: center; font-size: 18px; font-weight: 700; padding: 9px 4px; border-bottom: 1px solid rgba(0,0,0,0.07); font-variant-numeric: tabular-nums; }
+  .standing:last-child { border-bottom: none; }
+  .bigicon { text-align: center; font-size: 52px; margin: 2px 0 6px; }
   /* keyboard */
   .kb { padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,0.55); border-top: 1px solid var(--line); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-radius: 20px 20px 0 0; }
   .krow { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -102,6 +105,7 @@ const DEF = { target: 10000, openMin: 500, one: 100, five: 50, threeOnes: 300, t
   fourX: 1000, fiveX: 2000, sixX: 3000, straight: 1500, threePair: 1500, fourPlusPair: 1500, twoTrips: 2500 };
 let CFG = load("farkle2-cfg") || { ...DEF };
 let S = load("farkle2-state") || null; // {players:[{name,turns:[],opened}], turn, tally:[], msg, final, finalLeft, winner}
+if (S && S.winner === undefined) S.winner = null;
 let hist = [];
 let modal = null; // 'three'|'players'|'settings'|{editTurn:{p,i}}|'winner'
 
@@ -129,7 +133,18 @@ function render() {
   hdr.querySelector("#resetP").onclick = () => { if (confirm("Start a new game? (players kept)")) { snap(); S.players.forEach((p) => { p.turns = []; p.opened = false; }); S.turn = 0; S.tally = []; S.msg = "New game"; S.final = null; S.finalLeft = null; S.winner = null; save(); render(); } };
   hdr.querySelector("#addP").onclick = () => { modal = "players"; render(); };
   app.appendChild(hdr);
-  if (S.final !== null && !S.winner && S.winner !== 0) app.appendChild(el('<div class="banner">⚠ Final round — last turn for everyone!</div>'));
+  if (S.final !== null && S.winner === null && S.players.length) {
+    const fc = S.players[S.turn];
+    const maxOther = Math.max(...S.players.filter((_, k) => k !== S.turn).map(total));
+    const need = maxOther + 50 - total(fc);
+    const btxt = need > 0 ? "🚨 FINAL LICKS — " + esc(fc.name) + " needs " + need.toLocaleString() + " to steal it"
+                          : "🚨 FINAL LICKS — " + esc(fc.name) + " leads. Bank it, don't farkle!";
+    app.appendChild(el('<div class="banner">' + btxt + "</div>"));
+  } else if (S.winner !== null) {
+    const wb = el('<div class="banner">🏆 ' + esc(S.players[S.winner].name) + " won — tap here for the final score</div>");
+    wb.onclick = () => { modal = "winner"; render(); };
+    app.appendChild(wb);
+  }
   // ledger
   const maxTurns = Math.max(0, ...S.players.map((p) => p.turns.length));
   const led = el('<div class="ledgerscroll"><div class="ledger" id="cols"></div></div>');
@@ -161,7 +176,7 @@ function render() {
     '<div class="krow"><button class="k orange" id="str" style="font-size:17px">Straight</button><button class="k orange" id="p3" style="font-size:17px">3 Pair</button><button class="k orange" id="x5">5x</button><button class="k orange" id="x6">6x</button></div>' +
     '<div class="krow"><button class="k orange" id="fp" style="font-size:19px">4x + Pair</button><button class="k orange" id="tt" style="font-size:19px">2 Triplets</button></div>' +
     '<div class="krow"><button class="k red" id="fk">FARKLE</button><button class="k green" id="bk">BANK</button></div></div>');
-  const add = (l, v) => { S.tally.push({ l, v }); save(); render(); };
+  const add = (l, v) => { if (S.winner !== null) return; S.tally.push({ l, v }); save(); render(); };
   kb.querySelector("#d1").onclick = () => add("1", CFG.one);
   kb.querySelector("#d5").onclick = () => add("5", CFG.five);
   kb.querySelector("#x3").onclick = () => { modal = "three"; render(); };
@@ -176,9 +191,9 @@ function render() {
   kb.querySelector("#clr").onclick = () => { S.tally = []; save(); render(); };
   kb.querySelector("#gear").onclick = () => { modal = "settings"; render(); };
   kb.querySelector("#reset2").onclick = () => { S.tally = []; save(); render(); };
-  kb.querySelector("#fk").onclick = () => { if (!cur) return; snap(); S.tally = []; cur.turns.push(0); S.msg = cur.name + " farkled 💀"; endTurn(); };
+  kb.querySelector("#fk").onclick = () => { if (!cur || S.winner !== null) return; snap(); S.tally = []; cur.turns.push(0); S.msg = cur.name + " farkled 💀"; endTurn(); };
   kb.querySelector("#bk").onclick = () => {
-    if (!cur || sum === 0) return;
+    if (!cur || sum === 0 || S.winner !== null) return;
     if (!cur.opened && sum < CFG.openMin) return;
     snap(); cur.turns.push(sum); cur.opened = true; S.msg = cur.name + " scored " + sum.toLocaleString();
     S.tally = []; endTurn();
@@ -192,13 +207,14 @@ function endTurn() {
   if (S.final === null && total(S.players[i]) >= CFG.target) {
     S.final = i;
     S.finalLeft = S.players.map((_, k) => k).filter((k) => k !== i);
-    S.msg = S.players[i].name + " hit " + CFG.target.toLocaleString() + "! Final round";
+    S.msg = S.players[i].name + " hit " + CFG.target.toLocaleString() + "!";
+    modal = "final";
   } else if (S.finalLeft) S.finalLeft = S.finalLeft.filter((k) => k !== i);
   if (S.final !== null && S.finalLeft && S.finalLeft.length === 0) {
     let best = 0;
     S.players.forEach((p, k) => { if (total(p) > total(S.players[best])) best = k; });
     S.winner = best; S.msg = "🏆 " + S.players[best].name + " wins with " + total(S.players[best]).toLocaleString() + "!";
-    modal = null; save(); render(); return;
+    modal = "winner"; save(); render(); return;
   }
   let n = (i + 1) % S.players.length;
   if (S.finalLeft && S.finalLeft.length) { while (!S.finalLeft.includes(n)) n = (n + 1) % S.players.length; }
@@ -250,6 +266,25 @@ function renderModal() {
       sr.appendChild(r);
     });
     m.querySelector("#def").onclick = () => { CFG = { ...DEF }; save(); render(); };
+  } else if (modal === "final") {
+    const trig = S.players[S.final];
+    const others = S.players.filter((_, k) => k !== S.final);
+    const lead = Math.max(...S.players.map(total));
+    const rows = others.map((p) => '<div class="standing" style="border-color:rgba(255,255,255,0.2)"><span>' + esc(p.name) + "</span><span>needs " + Math.max(50, lead + 50 - total(p)).toLocaleString() + "</span></div>").join("");
+    m = el('<div class="modal"><div class="bigicon">🚨</div><h2>FINAL LICKS!</h2><div style="text-align:center;font-size:16px;font-weight:600;margin-bottom:12px">' + esc(trig.name) + " banked <b>" + total(trig).toLocaleString() + "</b>.<br/>Everyone else gets one last turn:</div>" + rows + '<button class="mbtn" style="background:#e8973c;color:#2b2825" id="fgo">Bring it on</button></div>');
+    m.querySelector("#fgo").onclick = () => { modal = null; render(); };
+  } else if (modal === "winner") {
+    const order = S.players.map((p, k) => k).sort((a, b) => total(S.players[b]) - total(S.players[a]));
+    const rows = order.map((k, ri) => '<div class="standing"><span>' + (ri === 0 ? "🏆 " : "") + esc(S.players[k].name) + "</span><span>" + total(S.players[k]).toLocaleString() + "</span></div>").join("");
+    m = el('<div class="modal light"><button class="x" style="background:#b3ada3">✕</button><div class="bigicon">🏆</div><h2>' + esc(S.players[S.winner].name) + " wins!</h2>" + rows + '<button class="mbtn" style="background:linear-gradient(180deg,#6aa53a,#538427);color:#fff" id="rem">Rematch — winner leads off</button></div>');
+    m.querySelector("#rem").onclick = () => {
+      snap();
+      const lead = S.winner;
+      S.players.forEach((p) => { p.turns = []; p.opened = false; });
+      S.turn = lead; S.tally = []; S.final = null; S.finalLeft = null; S.winner = null;
+      S.msg = "Rematch! " + S.players[lead].name + " leads off";
+      modal = null; save(); render();
+    };
   } else if (modal && modal.editTurn) {
     const { p, i } = modal.editTurn;
     const pl = S.players[p];
